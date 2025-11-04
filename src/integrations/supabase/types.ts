@@ -14,7 +14,54 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      plants: {
+        Row: {
+          botanical_name: string | null
+          created_at: string
+          english_name: string | null
+          family: string | null
+          id: string
+          images: string[] | null
+          indications: string[] | null
+          name: string
+          shloka: string | null
+          source_document: string | null
+          synonyms: string[] | null
+          updated_at: string | null
+          useful_parts: string[] | null
+        }
+        Insert: {
+          botanical_name?: string | null
+          created_at?: string
+          english_name?: string | null
+          family?: string | null
+          id?: string
+          images?: string[] | null
+          indications?: string[] | null
+          name: string
+          shloka?: string | null
+          source_document?: string | null
+          synonyms?: string[] | null
+          updated_at?: string | null
+          useful_parts?: string[] | null
+        }
+        Update: {
+          botanical_name?: string | null
+          created_at?: string
+          english_name?: string | null
+          family?: string | null
+          id?: string
+          images?: string[] | null
+          indications?: string[] | null
+          name?: string
+          shloka?: string | null
+          source_document?: string | null
+          synonyms?: string[] | null
+          updated_at?: string | null
+          useful_parts?: string[] | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
