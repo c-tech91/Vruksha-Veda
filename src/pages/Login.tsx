@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
@@ -154,7 +155,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex flex-col">
       <Header />
       
       <div className="flex items-center justify-center min-h-screen px-4 pt-24">
@@ -230,6 +231,8 @@ const Login = () => {
           </div>
         </div>
       </div>
+      
+      <Footer />
     </div>
   );
 };

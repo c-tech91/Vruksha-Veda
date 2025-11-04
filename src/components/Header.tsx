@@ -97,7 +97,7 @@ const Header = () => {
               className={`text-xl sm:text-2xl font-bold transition-all ${
                 isScrolled
                   ? "bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent"
-                  : "text-black"
+                  : "text-white"
               }`}
             >
               VrukshaVeda
@@ -120,6 +120,18 @@ const Header = () => {
                     <span className="px-2">Home</span>
                   </Button>
                 </Link>
+                <Link to="/plants">
+                  <Button
+                    variant="ghost"
+                    className={`rounded-full px-4 py-2.5 transition-all ${
+                      isScrolled
+                        ? "bg-emerald-50 text-primary hover:bg-emerald-100"
+                        : "bg-white/90 text-primary hover:bg-white backdrop-blur-sm"
+                    } ${location.pathname === "/plants" ? "ring-2 ring-primary/30" : ""}`}
+                  >
+                    <span className="px-2">Explore Plants</span>
+                  </Button>
+                </Link>
                 <Link to="/admin">
                   <Button
                     variant="ghost"
@@ -139,7 +151,19 @@ const Header = () => {
                   <span className="px-2">Logout</span>
                 </Button>
               </>
-            ) : null}
+            ) : (
+              <Link to="/plants">
+                <Button
+                  className={`rounded-full px-4 py-2.5 transition-all ${
+                    isScrolled
+                      ? "bg-gradient-to-r from-primary to-secondary text-white"
+                      : "bg-white/90 text-primary hover:bg-white backdrop-blur-sm"
+                  } ${location.pathname === "/plants" ? "ring-2 ring-primary/30" : ""}`}
+                >
+                  <span className="px-2">Explore Plants</span>
+                </Button>
+              </Link>
+            )}
           </nav>
 
           {/* Mobile Menu Button */}
@@ -160,34 +184,52 @@ const Header = () => {
         </div>
 
         {/* Mobile Menu */}
-        {isMobileMenuOpen && isAuthenticated && (
+        {isMobileMenuOpen && (
           <div className="md:hidden py-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl mt-2 mb-4 animate-fade-in">
             <nav className="flex flex-col gap-2 px-4">
-              <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start rounded-xl hover:bg-emerald-50"
-                >
-                  Home
-                </Button>
-              </Link>
-              <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)}>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start rounded-xl hover:bg-emerald-50"
-                >
-                  Admin
-                </Button>
-              </Link>
-              <Button
-                onClick={() => {
-                  handleLogout();
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl"
-              >
-                Logout
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <Link to="/" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start rounded-xl hover:bg-emerald-50"
+                    >
+                      Home
+                    </Button>
+                  </Link>
+                  <Link to="/plants" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start rounded-xl hover:bg-emerald-50"
+                    >
+                      Explore Plants
+                    </Button>
+                  </Link>
+                  <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start rounded-xl hover:bg-emerald-50"
+                    >
+                      Admin
+                    </Button>
+                  </Link>
+                  <Button
+                    onClick={() => {
+                      handleLogout();
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl"
+                  >
+                    Logout
+                  </Button>
+                </>
+              ) : (
+                <Link to="/plants" onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button className="w-full bg-gradient-to-r from-primary to-secondary text-white rounded-xl">
+                    Explore Plants
+                  </Button>
+                </Link>
+              )}
             </nav>
           </div>
         )}

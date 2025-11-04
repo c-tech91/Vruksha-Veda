@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -324,10 +325,10 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex flex-col">
       <Header />
 
-      <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto space-y-8">
           {/* Page Header */}
           <div className="text-center animate-fade-in-up">
@@ -621,6 +622,8 @@ const Admin = () => {
           </div>
         </div>
       )}
+      
+      <Footer />
     </div>
   );
 };

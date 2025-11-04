@@ -112,22 +112,13 @@ const Hero = () => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20 animate-fade-in-up animation-delay-600">
-            <Link to="/admin">
+            <Link to="/plants">
               <Button
                 size="lg"
                 className="rounded-full px-8 py-6 text-lg bg-white text-primary hover:bg-gray-50 hover:scale-105 transition-all shadow-xl"
               >
                 <span className="px-2">Explore Plants</span>
                 <ArrowRight className="ml-2 w-5 h-5" />
-              </Button>
-            </Link>
-            <Link to="/login">
-              <Button
-                size="lg"
-                variant="outline"
-                className="rounded-full px-8 py-6 text-lg bg-white/10 backdrop-blur-sm border-2 border-white/30 text-white hover:bg-white/20 transition-all"
-              >
-                <span className="px-2">Admin Access</span>
               </Button>
             </Link>
           </div>

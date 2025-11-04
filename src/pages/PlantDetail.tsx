@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   Leaf, 
@@ -13,6 +13,7 @@ import {
   Pause
 } from "lucide-react";
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -42,42 +43,43 @@ const PlantDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const audioElementRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (id) {
       loadPlant(id);
     }
 
-    // Load voices when component mounts (important for mobile)
-    if ('speechSynthesis' in window) {
-      // Some browsers need voices to be loaded
-      const loadVoices = () => {
-        const voices = speechSynthesis.getVoices();
-        console.log('Available voices:', voices.length);
-      };
-      
-      // Load voices immediately
-      loadVoices();
-      
-      // Wait for voices to load (especially on mobile)
-      if (speechSynthesis.onvoiceschanged !== null) {
-        speechSynthesis.onvoiceschanged = loadVoices;
-      }
-      
-      // Also try loading after a delay (mobile browsers sometimes need this)
-      const timeoutId = setTimeout(loadVoices, 500);
-      
-      return () => {
-        clearTimeout(timeoutId);
-        if ('speechSynthesis' in window) {
-          speechSynthesis.cancel();
-          if (speechSynthesis.onvoiceschanged) {
-            speechSynthesis.onvoiceschanged = null;
-          }
-        }
-      };
+    // Create audio element for TTS playback
+    if (!audioElementRef.current) {
+      audioElementRef.current = new Audio();
     }
+
+    // Cleanup: stop any ongoing audio when component unmounts
+    return () => {
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.src = '';
+      }
+    };
   }, [id]);
+
+  // Stop audio playback function
+  const stopAudio = () => {
+    // Stop Web Speech API
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
+    // Also stop any HTML audio element if exists
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current.src = '';
+    }
+    
+    setIsPlaying(false);
+  };
 
   const loadPlant = async (plantId: string) => {
     try {
@@ -103,6 +105,12 @@ const PlantDetail = () => {
         setError("Plant not found");
         return;
       }
+
+      // Debug: Log the plant data to see what's being loaded
+      console.log("Plant data loaded:", data);
+      console.log("Shloka field:", data.shloka);
+      console.log("Shloka type:", typeof data.shloka);
+      console.log("Shloka length:", data.shloka?.length);
 
       setPlant(data);
     } catch (err) {
@@ -159,20 +167,30 @@ const PlantDetail = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex flex-col">
       <Header />
       
-      <div className="pt-24 pb-12 px-4 sm:px-6 lg:px-8">
+      <div className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
           {/* Back Button */}
-          <Button
-            onClick={() => navigate(-1)}
-            variant="ghost"
-            className="mb-6 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
-          </Button>
+          <div className="flex gap-3 mb-6">
+            <Button
+              onClick={() => navigate("/plants")}
+              variant="ghost"
+              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Plants
+            </Button>
+            <Button
+              onClick={() => navigate("/")}
+              variant="ghost"
+              className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Home
+            </Button>
+          </div>
 
           <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
             {/* Header Section */}
@@ -316,15 +334,17 @@ const PlantDetail = () => {
               </div>
 
               {/* Sanskrit Shloka */}
-              {plant.shloka && (
+              {plant.shloka !== null && 
+               plant.shloka !== undefined && 
+               String(plant.shloka).trim() !== '' && (
                 <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-100">
                   <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <BookOpen className="w-5 h-5 text-purple-600" />
                     Sanskrit Shloka
                   </h2>
                   <div className="bg-white/50 p-6 rounded-lg mb-4">
-                    <p className="text-gray-800 text-lg font-serif leading-relaxed whitespace-pre-wrap text-center">
-                      {plant.shloka}
+                    <p className="text-gray-800 text-lg font-serif leading-relaxed whitespace-pre-wrap text-center break-words">
+                      {String(plant.shloka)}
                     </p>
                   </div>
                   
@@ -332,47 +352,19 @@ const PlantDetail = () => {
                     {isPlaying ? (
                       <Button
                         onClick={() => {
-                          if ('speechSynthesis' in window) {
-                            speechSynthesis.pause();
-                            setIsPlaying(false);
-                            toast({
-                              title: "Paused",
-                              description: "Audio playback paused",
-                            });
-                          }
+                          stopAudio();
                         }}
                         size="lg"
-                        className="bg-purple-600 hover:bg-purple-700 text-white rounded-full"
+                        className="bg-red-600 hover:bg-red-700 text-white rounded-full"
                       >
                         <Pause className="mr-2 w-5 h-5" />
-                        Pause Audio
+                        Stop Audio
                       </Button>
                     ) : (
                       <Button
                         onClick={async () => {
-                          if (!('speechSynthesis' in window)) {
-                            toast({
-                              title: "Not Supported",
-                              description: "Speech synthesis not supported in your browser",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-
                           try {
-                            // Cancel any ongoing speech first - important to start from beginning
-                            speechSynthesis.cancel();
-                            
-                            // Wait longer to ensure complete cancellation
-                            await new Promise(resolve => setTimeout(resolve, 500));
-                            
-                            // Clean and prepare the text
-                            let textToSpeak = (plant.shloka || '').trim();
-                            
-                            // Keep the original Sanskrit text - just normalize whitespace
-                            textToSpeak = textToSpeak
-                              .replace(/\s+/g, ' ') // Replace multiple spaces with single space
-                              .trim();
+                            const textToSpeak = (plant.shloka || '').trim();
                             
                             if (!textToSpeak || textToSpeak.length === 0) {
                               toast({
@@ -382,148 +374,85 @@ const PlantDetail = () => {
                               });
                               return;
                             }
-                            
-                            // Get available voices (reload to ensure we have latest)
-                            let voices = speechSynthesis.getVoices();
-                            
-                            // If no voices loaded yet, wait for them (mobile browsers)
-                            if (voices.length === 0) {
-                              // Wait for voices to load
-                              await new Promise(resolve => {
-                                let attempts = 0;
-                                const maxAttempts = 20; // 2 seconds max wait
-                                
-                                const checkVoices = () => {
-                                  voices = speechSynthesis.getVoices();
-                                  attempts++;
-                                  
-                                  if (voices.length > 0 || attempts >= maxAttempts) {
-                                    resolve(void 0);
-                                  } else {
-                                    setTimeout(checkVoices, 100);
-                                  }
-                                };
-                                
-                                // Try immediate check
-                                checkVoices();
-                                
-                                // Also listen for voices changed event
-                                if (speechSynthesis.onvoiceschanged !== null) {
-                                  speechSynthesis.onvoiceschanged = () => {
-                                    voices = speechSynthesis.getVoices();
-                                    if (voices.length > 0) {
-                                      resolve(void 0);
-                                    }
-                                  };
-                                }
+
+                            // Stop any existing audio first
+                            stopAudio();
+
+                            // Use Web Speech API (native, works on all platforms including mobile)
+                            if (!('speechSynthesis' in window)) {
+                              toast({
+                                title: "Not Supported",
+                                description: "Text-to-speech is not supported on this device.",
+                                variant: "destructive",
                               });
+                              return;
                             }
+
+                            // Cancel any ongoing speech
+                            speechSynthesis.cancel();
                             
-                            voices = speechSynthesis.getVoices();
+                            // Wait a bit to ensure cancellation
+                            await new Promise(resolve => setTimeout(resolve, 200));
                             
+                            // Create utterance
                             const utterance = new SpeechSynthesisUtterance(textToSpeak);
                             
-                            // Prioritize Sanskrit/Hindi voices for Sanskrit text
+                            // Try to find a Hindi voice for Sanskrit
+                            const voices = speechSynthesis.getVoices();
                             let selectedVoice = voices.find(voice => 
-                              voice.lang === 'sa-IN' || 
-                              voice.lang === 'sa' ||
-                              voice.lang.startsWith('sa-') ||
-                              voice.name.toLowerCase().includes('sanskrit')
+                              voice.lang === 'hi-IN' || 
+                              voice.lang === 'hi' ||
+                              voice.lang.startsWith('hi-')
                             );
                             
-                            // If no Sanskrit voice, try Hindi
-                            if (!selectedVoice) {
-                              selectedVoice = voices.find(voice => 
-                                voice.lang === 'hi-IN' || 
-                                voice.lang === 'hi' ||
-                                voice.lang.startsWith('hi-') ||
-                                voice.name.toLowerCase().includes('hindi')
-                              );
-                            }
-                            
-                            // If no Hindi/Sanskrit, try Indian English (might have better Sanskrit support)
+                            // If no Hindi voice, try any Indian English
                             if (!selectedVoice) {
                               selectedVoice = voices.find(voice => 
                                 voice.lang === 'en-IN' ||
-                                (voice.lang.includes('IN') && voice.lang.includes('en'))
+                                voice.lang.includes('IN')
                               );
                             }
                             
-                            // If still no voice, try any English voice
-                            if (!selectedVoice) {
-                              selectedVoice = voices.find(voice => 
-                                voice.lang === 'en-US' || 
-                                voice.lang === 'en-GB' ||
-                                voice.lang.startsWith('en-')
-                              );
-                            }
-                            
-                            // If still no voice, use any available voice
+                            // If still no voice, use any available
                             if (!selectedVoice && voices.length > 0) {
                               selectedVoice = voices[0];
                             }
                             
-                            // Set voice and language - prioritize Sanskrit/Hindi
+                            // Set voice and language
                             if (selectedVoice) {
-                              try {
-                                utterance.voice = selectedVoice;
-                                const voiceLang = selectedVoice.lang || 'hi-IN';
-                                
-                                // Use Sanskrit if available, otherwise Hindi, otherwise voice's language
-                                if (voiceLang.startsWith('sa')) {
-                                  utterance.lang = 'sa-IN';
-                                } else if (voiceLang.startsWith('hi')) {
-                                  utterance.lang = 'hi-IN';
-                                } else {
-                                  utterance.lang = voiceLang;
-                                }
-                              } catch (e) {
-                                console.warn('Could not set voice, using Hindi language:', e);
-                                utterance.lang = 'hi-IN';
-                              }
+                              utterance.voice = selectedVoice;
+                              utterance.lang = selectedVoice.lang || 'hi-IN';
                             } else {
-                              // Default to Hindi for Sanskrit text
                               utterance.lang = 'hi-IN';
                             }
                             
-                            // Adjust settings for better Sanskrit pronunciation
-                            utterance.rate = 0.65; // Slower for better clarity with Sanskrit
+                            // Set speech parameters
+                            utterance.rate = 0.7; // Slower for clarity
                             utterance.pitch = 1.0;
                             utterance.volume = 1.0;
                             
                             // Set up event handlers
-                            let hasStarted = false;
-                            
                             utterance.onstart = () => {
-                              hasStarted = true;
                               setIsPlaying(true);
                               toast({
                                 title: "Playing",
-                                description: "Playing Sanskrit shloka from beginning",
+                                description: "Playing Sanskrit shloka",
                               });
+                            };
+                            
+                            utterance.onend = () => {
+                              setIsPlaying(false);
                             };
                             
                             utterance.onerror = (event) => {
                               console.error('Speech error:', event);
                               setIsPlaying(false);
-                              hasStarted = false;
-                              
-                              // More specific error messages
-                              let errorMsg = "Audio playback failed. Please try again.";
-                              if (event.error === 'network') {
-                                errorMsg = "Network error. Please check your connection.";
-                              } else if (event.error === 'not-allowed') {
-                                errorMsg = "Permission denied. Please allow audio playback.";
+                              let errorMsg = "Failed to play audio. Please try again.";
+                              if (event.error === 'not-allowed') {
+                                errorMsg = "Permission denied. Please allow audio playback in your browser settings.";
                               } else if (event.error === 'synthesis-failed') {
-                                errorMsg = "Speech synthesis failed. Your device may not support Sanskrit. Please try a different browser or device.";
-                              } else if (event.error === 'synthesis-unavailable') {
-                                errorMsg = "Speech synthesis unavailable. Please try again later.";
-                              } else if (event.error === 'text-too-long') {
-                                errorMsg = "Text is too long. Please try a shorter shloka.";
-                              } else if (event.error === 'audio-busy') {
-                                errorMsg = "Audio is busy. Please wait a moment and try again.";
+                                errorMsg = "Speech synthesis failed. Your device may not support this language.";
                               }
-                              
                               toast({
                                 title: "Error",
                                 description: errorMsg,
@@ -531,34 +460,15 @@ const PlantDetail = () => {
                               });
                             };
                             
-                            utterance.onend = () => {
-                              setIsPlaying(false);
-                              hasStarted = false;
-                            };
-                            
-                            utterance.onpause = () => {
-                              setIsPlaying(false);
-                            };
-                            
-                            utterance.onresume = () => {
-                              setIsPlaying(true);
-                            };
-                            
-                            // Ensure we start from the beginning - cancel any existing speech
-                            speechSynthesis.cancel();
-                            
-                            // Wait a bit more to ensure complete cancellation
-                            await new Promise(resolve => setTimeout(resolve, 200));
-                            
-                            // Now speak from the beginning
+                            // Play the speech
                             try {
                               speechSynthesis.speak(utterance);
                             } catch (speakError) {
-                              console.error('Error calling speak:', speakError);
+                              console.error('Speak error:', speakError);
                               setIsPlaying(false);
                               toast({
                                 title: "Error",
-                                description: "Failed to start playback. Please try again or check browser permissions.",
+                                description: "Failed to start playback. Please try again.",
                                 variant: "destructive",
                               });
                             }
@@ -598,6 +508,8 @@ const PlantDetail = () => {
           </div>
         </div>
       </div>
+      
+      <Footer />
     </div>
   );
 };
