@@ -65,7 +65,7 @@ const Footer = () => {
               🌿 Developed by <span className="font-semibold">Vedang Kulkarni</span> & <span className="font-semibold">Kritish Bokade</span>
             </p>
             <p className="text-white text-sm">
-              Computer Technology Department, Yeshwantrao Chavan College of Engineering
+              Department of Computer Technology, Yeshwantrao Chavan College of Engineering
             </p>
             <p className="text-white text-lg font-semibold italic mt-4">
               "Preserving nature through knowledge — VrukshaVeda"
