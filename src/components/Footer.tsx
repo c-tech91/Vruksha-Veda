@@ -62,7 +62,7 @@ const Footer = () => {
           {/* Credits */}
           <div className="text-center space-y-3">
             <p className="text-white text-base leading-relaxed">
-              🌿 Developed by <span className="font-semibold">Vedang Kulkarni</span> & <span className="font-semibold">Kritish Bokade</span>
+              🌿 Developed by <span className="font-semibold">Vedang Kulkarni</span> & <span className="font-semibold">Kritish Bokde</span>
             </p>
             <p className="text-white text-sm">
               Department of Computer Technology, Yeshwantrao Chavan College of Engineering
