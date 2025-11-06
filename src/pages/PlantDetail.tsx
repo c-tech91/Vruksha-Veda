@@ -1,12 +1,14 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+Tree Details:-  import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { 
   Leaf, 
   ArrowLeft, 
+  Loader2, 
   AlertCircle,
   ImageIcon,
   BookOpen,
   Sprout,
+  FlaskConical,
   Volume2,
   Pause
 } from "lucide-react";
@@ -32,60 +34,6 @@ type Plant = {
   updated_at?: string;
 };
 
-const TTS_RESUME_NUDGE_MS = 250;
-
-// -------- Sanskrit-only helpers --------
-const getVoicesAsync = (): Promise<SpeechSynthesisVoice[]> =>
-  new Promise((resolve) => {
-    const synth = window.speechSynthesis;
-    let voices = synth.getVoices();
-    if (voices && voices.length) return resolve(voices);
-    const iv = setInterval(() => {
-      voices = synth.getVoices();
-      if (voices && voices.length) {
-        clearInterval(iv);
-        resolve(voices);
-      }
-    }, 100);
-    setTimeout(() => {
-      clearInterval(iv);
-      resolve(synth.getVoices() || []);
-    }, 3000);
-  });
-
-// Strict Sanskrit voice pick: sa / sa-IN / name includes Sanskrit
-const pickSanskritVoice = (voices: SpeechSynthesisVoice[]) => {
-  const lower = (s?: string) => (s || "").toLowerCase();
-  return (
-    voices.find(v => lower(v.lang) === "sa" || lower(v.lang) === "sa-in") ||
-    voices.find(v => lower(v.lang).startsWith("sa")) ||
-    voices.find(v => lower(v.name).includes("sanskrit")) ||
-    null
-  );
-};
-
-// Chunk text to avoid Android stalls
-const chunkText = (text: string, maxLen = 180) => {
-  const sentences = text.replace(/\s+/g, " ").split(/(?<=[।.!?])\s+/);
-  const chunks: string[] = [];
-  let buf = "";
-  for (const s of sentences) {
-    if ((buf + " " + s).trim().length <= maxLen) {
-      buf = (buf ? buf + " " : "") + s;
-    } else {
-      if (buf) chunks.push(buf);
-      if (s.length <= maxLen) {
-        buf = s;
-      } else {
-        for (let i = 0; i < s.length; i += maxLen) chunks.push(s.slice(i, i + maxLen));
-        buf = "";
-      }
-    }
-  }
-  if (buf) chunks.push(buf);
-  return chunks;
-};
-
 const PlantDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -95,164 +43,89 @@ const PlantDetail = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  // TTS refs
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
-  const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
-  const ttsStopRef = useRef<() => void>(() => {});
-  const resumeNudgeRef = useRef<number | null>(null);
-  const canceledRef = useRef<boolean>(false);
 
   useEffect(() => {
-    if (id) loadPlant(id);
-    if (!audioElementRef.current) audioElementRef.current = new Audio();
-    return () => stopAudio();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (id) {
+      loadPlant(id);
+    }
+
+    // Create audio element for TTS playback
+    if (!audioElementRef.current) {
+      audioElementRef.current = new Audio();
+    }
+
+    // Cleanup: stop any ongoing audio when component unmounts
+    return () => {
+      if (audioElementRef.current) {
+        audioElementRef.current.pause();
+        audioElementRef.current.src = '';
+      }
+    };
   }, [id]);
+
+  // Stop audio playback function
+  const stopAudio = () => {
+    // Stop Web Speech API
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
+    // Also stop any HTML audio element if exists
+    if (audioElementRef.current) {
+      audioElementRef.current.pause();
+      audioElementRef.current.currentTime = 0;
+      audioElementRef.current.src = '';
+    }
+    
+    setIsPlaying(false);
+  };
 
   const loadPlant = async (plantId: string) => {
     try {
       setLoading(true);
       setError(null);
+
       const { data, error: fetchError } = await supabase
         .from("plants")
         .select("*")
         .eq("id", plantId)
         .single();
+
       if (fetchError) {
-        if ((fetchError as any).code === "PGRST116") setError("Plant not found");
-        else throw fetchError;
+        if (fetchError.code === "PGRST116") {
+          setError("Plant not found");
+        } else {
+          throw fetchError;
+        }
         return;
       }
-      if (!data) return setError("Plant not found");
+
+      if (!data) {
+        setError("Plant not found");
+        return;
+      }
+
+      // Debug: Log the plant data to see what's being loaded
+      console.log("Plant data loaded:", data);
+      console.log("Shloka field:", data.shloka);
+      console.log("Shloka type:", typeof data.shloka);
+      console.log("Shloka length:", data.shloka?.length);
+
       setPlant(data);
     } catch (err) {
-      console.error(err);
+      console.error("Error loading plant:", err);
       setError("Failed to load plant details. Please try again.");
-      toast({ title: "Error", description: "Failed to load plant details", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to load plant details",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const clearResumeNudge = () => {
-    if (resumeNudgeRef.current) {
-      window.clearInterval(resumeNudgeRef.current);
-      resumeNudgeRef.current = null;
-    }
-  };
-
-  const stopAudio = useCallback(() => {
-    try {
-      canceledRef.current = true;
-      clearResumeNudge();
-      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-      if (audioElementRef.current) {
-        audioElementRef.current.pause();
-        audioElementRef.current.currentTime = 0;
-        audioElementRef.current.src = "";
-      }
-    } finally {
-      setIsPlaying(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    ttsStopRef.current = stopAudio;
-  }, [stopAudio]);
-
-  const startResumeNudge = () => {
-    clearResumeNudge();
-    if ("speechSynthesis" in window) {
-      resumeNudgeRef.current = window.setInterval(() => {
-        try { window.speechSynthesis.resume(); } catch {}
-      }, TTS_RESUME_NUDGE_MS);
-    }
-  };
-
-  const speakChunk = (text: string): Promise<void> =>
-    new Promise(async (resolve, reject) => {
-      if (!("speechSynthesis" in window)) return reject(new Error("Speech synthesis not supported"));
-      const utter = new SpeechSynthesisUtterance(text);
-
-      // Sanskrit voice strictly
-      if (!voiceRef.current) {
-        const voices = await getVoicesAsync();
-        voiceRef.current = pickSanskritVoice(voices);
-      }
-
-      // Always set Sanskrit language tag
-      utter.lang = "sa-IN";
-
-      // Assign voice only if truly Sanskrit (no Hindi/Marathi fallback)
-      if (voiceRef.current) {
-        utter.voice = voiceRef.current;
-      }
-
-      utter.rate = 0.9;
-      utter.pitch = 1.0;
-      utter.volume = 1.0;
-
-      utter.onstart = () => startResumeNudge();
-      utter.onend = () => { clearResumeNudge(); resolve(); };
-      utter.onerror = (e) => { clearResumeNudge(); reject(e.error || new Error("TTS error")); };
-
-      setTimeout(() => {
-        try { window.speechSynthesis.speak(utter); } catch (e) { reject(e); }
-      }, 50);
-    });
-
-  const playShloka = useCallback(async (text: string) => {
-    stopAudio();
-    const trimmed = text.trim();
-    if (!trimmed) {
-      toast({ title: "Error", description: "No text available to play", variant: "destructive" });
-      return;
-    }
-
-    setIsPlaying(true);
-    canceledRef.current = false;
-
-    if ("speechSynthesis" in window) {
-      try {
-        // Preload voices & cache Sanskrit
-        const voices = await getVoicesAsync();
-        voiceRef.current = pickSanskritVoice(voices) || null;
-
-        // Speak chunks sequentially (Sanskrit only)
-        const chunks = chunkText(trimmed);
-        for (let i = 0; i < chunks.length; i++) {
-          if (canceledRef.current) break;
-          await speakChunk(chunks[i]);
-        }
-
-        if (!canceledRef.current) setIsPlaying(false);
-        return;
-      } catch (err) {
-        console.warn("Web Speech (Sanskrit) failed:", err);
-      }
-    }
-
-    setIsPlaying(false);
-    toast({
-      title: "Sanskrit TTS unavailable",
-      description:
-        "This browser doesn't provide a Sanskrit voice. Try updating Chrome/Safari, or enable a Sanskrit TTS voice in the system.",
-      variant: "destructive",
-    });
-  }, [stopAudio, toast]);
-
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "visible" && isPlaying && "speechSynthesis" in window) {
-        try { window.speechSynthesis.resume(); } catch {}
-      }
-    };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [isPlaying]);
-
-  // -------------------- UI (unchanged) --------------------
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50">
@@ -296,8 +169,10 @@ const PlantDetail = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-green-50 flex flex-col">
       <Header />
+      
       <div className="flex-1 pt-24 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-6xl mx-auto">
+          {/* Back Button */}
           <div className="flex gap-3 mb-6">
             <Button
               onClick={() => navigate("/plants")}
@@ -318,6 +193,7 @@ const PlantDetail = () => {
           </div>
 
           <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
+            {/* Header Section */}
             <div className="bg-gradient-to-r from-emerald-500 to-teal-600 p-6 sm:p-8 text-white">
               <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
@@ -342,6 +218,7 @@ const PlantDetail = () => {
             </div>
 
             <div className="p-8">
+              {/* Images Section */}
               {plant.images && plant.images.length > 0 && (
                 <div className="mb-8">
                   <div className="mb-4">
@@ -350,6 +227,8 @@ const PlantDetail = () => {
                       Images
                     </h2>
                   </div>
+                  
+                  {/* Main Image */}
                   <div className="mb-4">
                     <img
                       src={plant.images[selectedImageIndex]}
@@ -357,6 +236,8 @@ const PlantDetail = () => {
                       className="w-full h-96 object-cover rounded-2xl shadow-lg"
                     />
                   </div>
+
+                  {/* Thumbnail Gallery */}
                   {plant.images.length > 1 && (
                     <div className="flex gap-4 overflow-x-auto pb-2">
                       {plant.images.map((image, index) => (
@@ -369,7 +250,11 @@ const PlantDetail = () => {
                               : "border-gray-200 hover:border-emerald-300"
                           }`}
                         >
-                          <img src={image} alt={`${plant.name} ${index + 1}`} className="w-full h-full object-cover" />
+                          <img
+                            src={image}
+                            alt={`${plant.name} ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
                         </button>
                       ))}
                     </div>
@@ -378,7 +263,9 @@ const PlantDetail = () => {
               )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Left Column */}
                 <div className="space-y-6">
+                  {/* Botanical Information */}
                   <div className="bg-emerald-50 rounded-xl p-6 border border-emerald-100">
                     <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                       <Sprout className="w-5 h-5 text-emerald-600" />
@@ -400,15 +287,19 @@ const PlantDetail = () => {
                     </dl>
                   </div>
 
+                  {/* Useful Parts */}
                   {plant.useful_parts && plant.useful_parts.length > 0 && (
                     <div className="bg-teal-50 rounded-xl p-6 border border-teal-100">
                       <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                        <BookOpen className="w-5 h-5 text-teal-600" />
+                        <FlaskConical className="w-5 h-5 text-teal-600" />
                         Useful Parts
                       </h2>
                       <div className="flex flex-wrap gap-2">
                         {plant.useful_parts.map((part, index) => (
-                          <span key={index} className="px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-medium">
+                          <span
+                            key={index}
+                            className="px-4 py-2 bg-teal-100 text-teal-700 rounded-full text-sm font-medium"
+                          >
                             {part}
                           </span>
                         ))}
@@ -417,7 +308,9 @@ const PlantDetail = () => {
                   )}
                 </div>
 
+                {/* Right Column */}
                 <div className="space-y-6">
+                  {/* Indications */}
                   {plant.indications && plant.indications.length > 0 && (
                     <div className="bg-amber-50 rounded-xl p-6 border border-amber-100">
                       <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
@@ -426,17 +319,24 @@ const PlantDetail = () => {
                       </h2>
                       <div className="flex flex-wrap gap-2">
                         {plant.indications.map((indication, index) => (
-                          <span key={index} className="px-4 py-2 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
+                          <span
+                            key={index}
+                            className="px-4 py-2 bg-amber-100 text-amber-700 rounded-full text-sm font-medium"
+                          >
                             {indication}
                           </span>
                         ))}
                       </div>
                     </div>
                   )}
+
                 </div>
               </div>
 
-              {plant.shloka != null && String(plant.shloka).trim() !== "" && (
+              {/* Sanskrit Shloka */}
+              {plant.shloka !== null && 
+               plant.shloka !== undefined && 
+               String(plant.shloka).trim() !== '' && (
                 <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 border border-purple-100">
                   <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
                     <BookOpen className="w-5 h-5 text-purple-600" />
@@ -447,27 +347,141 @@ const PlantDetail = () => {
                       {String(plant.shloka)}
                     </p>
                   </div>
+                  
                   <div className="flex justify-center gap-3">
                     {isPlaying ? (
-                      <Button onClick={() => ttsStopRef.current()} size="lg" className="bg-red-600 hover:bg-red-700 text-white rounded-full">
+                      <Button
+                        onClick={() => {
+                          stopAudio();
+                        }}
+                        size="lg"
+                        className="bg-red-600 hover:bg-red-700 text-white rounded-full"
+                      >
                         <Pause className="mr-2 w-5 h-5" />
                         Stop Audio
                       </Button>
                     ) : (
                       <Button
-                        onClick={() => {
-                          const t = (plant.shloka || "").trim();
-                          (async () => {
-                            if (!("speechSynthesis" in window)) {
+                        onClick={async () => {
+                          try {
+                            const textToSpeak = (plant.shloka || '').trim();
+                            
+                            if (!textToSpeak || textToSpeak.length === 0) {
                               toast({
-                                title: "Sanskrit TTS unavailable",
-                                description: "This browser doesn't support speech synthesis.",
+                                title: "Error",
+                                description: "No text available to play",
                                 variant: "destructive",
                               });
                               return;
                             }
-                            await playShloka(t);
-                          })();
+
+                            // Stop any existing audio first
+                            stopAudio();
+
+                            // Use Web Speech API (native, works on all platforms including mobile)
+                            if (!('speechSynthesis' in window)) {
+                              toast({
+                                title: "Not Supported",
+                                description: "Text-to-speech is not supported on this device.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            // Cancel any ongoing speech
+                            speechSynthesis.cancel();
+                            
+                            // Wait a bit to ensure cancellation
+                            await new Promise(resolve => setTimeout(resolve, 200));
+                            
+                            // Create utterance
+                            const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                            
+                            // Try to find a Hindi voice for Sanskrit
+                            const voices = speechSynthesis.getVoices();
+                            let selectedVoice = voices.find(voice => 
+                              voice.lang === 'hi-IN' || 
+                              voice.lang === 'hi' ||
+                              voice.lang.startsWith('hi-')
+                            );
+                            
+                            // If no Hindi voice, try any Indian English
+                            if (!selectedVoice) {
+                              selectedVoice = voices.find(voice => 
+                                voice.lang === 'en-IN' ||
+                                voice.lang.includes('IN')
+                              );
+                            }
+                            
+                            // If still no voice, use any available
+                            if (!selectedVoice && voices.length > 0) {
+                              selectedVoice = voices[0];
+                            }
+                            
+                            // Set voice and language
+                            if (selectedVoice) {
+                              utterance.voice = selectedVoice;
+                              utterance.lang = selectedVoice.lang || 'hi-IN';
+                            } else {
+                              utterance.lang = 'hi-IN';
+                            }
+                            
+                            // Set speech parameters
+                            utterance.rate = 0.7; // Slower for clarity
+                            utterance.pitch = 1.0;
+                            utterance.volume = 1.0;
+                            
+                            // Set up event handlers
+                            utterance.onstart = () => {
+                              setIsPlaying(true);
+                              toast({
+                                title: "Playing",
+                                description: "Playing Sanskrit shloka",
+                              });
+                            };
+                            
+                            utterance.onend = () => {
+                              setIsPlaying(false);
+                            };
+                            
+                            utterance.onerror = (event) => {
+                              console.error('Speech error:', event);
+                              setIsPlaying(false);
+                              let errorMsg = "Failed to play audio. Please try again.";
+                              if (event.error === 'not-allowed') {
+                                errorMsg = "Permission denied. Please allow audio playback in your browser settings.";
+                              } else if (event.error === 'synthesis-failed') {
+                                errorMsg = "Speech synthesis failed. Your device may not support this language.";
+                              }
+                              toast({
+                                title: "Error",
+                                description: errorMsg,
+                                variant: "destructive",
+                              });
+                            };
+                            
+                            // Play the speech
+                            try {
+                              speechSynthesis.speak(utterance);
+                            } catch (speakError) {
+                              console.error('Speak error:', speakError);
+                              setIsPlaying(false);
+                              toast({
+                                title: "Error",
+                                description: "Failed to start playback. Please try again.",
+                                variant: "destructive",
+                              });
+                            }
+                            
+                          } catch (error) {
+                            console.error('Error starting speech:', error);
+                            setIsPlaying(false);
+                            toast({
+                              title: "Error",
+                              description: "Failed to start audio playback. Please try again.",
+                              variant: "destructive",
+                            });
+                          }
                         }}
                         size="lg"
                         className="bg-purple-600 hover:bg-purple-700 text-white rounded-full"
@@ -480,6 +494,7 @@ const PlantDetail = () => {
                 </div>
               )}
 
+              {/* Metadata */}
               <div className="mt-8 pt-6 border-t border-gray-200">
                 <p className="text-sm text-gray-500">
                   Added on {new Date(plant.created_at).toLocaleDateString("en-US", {
@@ -493,6 +508,7 @@ const PlantDetail = () => {
           </div>
         </div>
       </div>
+      
       <Footer />
     </div>
   );
