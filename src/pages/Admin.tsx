@@ -11,7 +11,8 @@ import {
   X, 
   CheckCircle, 
   AlertCircle, 
-  Loader2 
+  Loader2,
+  Volume2
 } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import Header from "@/components/Header";
@@ -58,6 +59,7 @@ const Admin = () => {
   const [showQRModal, setShowQRModal] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedAudioFile, setSelectedAudioFile] = useState<File | null>(null);
   const qrRef = useRef<HTMLCanvasElement>(null);
 
   const [formData, setFormData] = useState<FormData>({
@@ -178,6 +180,22 @@ const Admin = () => {
     }
   };
 
+  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      // Validate file type
+      if (!file.type.startsWith('audio/')) {
+        toast({
+          title: "Invalid File",
+          description: "Please select an audio file (MP3, WAV, etc.)",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSelectedAudioFile(file);
+    }
+  };
+
   const uploadImages = async (plantId: string): Promise<string[]> => {
     const imageUrls: string[] = [];
 
@@ -200,6 +218,25 @@ const Admin = () => {
     }
 
     return imageUrls;
+  };
+
+  const uploadAudio = async (plantId: string): Promise<string | null> => {
+    if (!selectedAudioFile) return null;
+
+    const fileExt = selectedAudioFile.name.split(".").pop();
+    const fileName = `${plantId}/audio-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("plant-audio")
+      .upload(fileName, selectedAudioFile);
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = supabase.storage
+      .from("plant-audio")
+      .getPublicUrl(fileName);
+
+    return publicUrl;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -258,6 +295,19 @@ const Admin = () => {
         plant.images = imageUrls;
       }
 
+      // Upload audio if provided
+      if (selectedAudioFile) {
+        const audioUrl = await uploadAudio(plant.id);
+        if (audioUrl) {
+          const { error: updateError } = await supabase
+            .from("plants")
+            .update({ audio_url: audioUrl })
+            .eq("id", plant.id);
+
+          if (updateError) throw updateError;
+        }
+      }
+
       toast({
         title: "Success",
         description: `${formData.name} added successfully!`,
@@ -275,6 +325,7 @@ const Admin = () => {
         source_document: "",
       });
       setSelectedFiles([]);
+      setSelectedAudioFile(null);
       setShowAddForm(false);
       setSelectedPlant(plant);
       setShowQRModal(true);
@@ -438,6 +489,41 @@ const Admin = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700">
+                    Shloka Audio (MP3) - Optional
+                  </label>
+                  <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition-all">
+                    <Volume2 className="w-8 h-8 text-purple-600 mb-2" />
+                    <span className="text-gray-600 text-sm">Click to upload audio file</span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      MP3, WAV, OGG • Max 10MB
+                    </span>
+                    <input
+                      type="file"
+                      accept="audio/*"
+                      onChange={handleAudioFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                  {selectedAudioFile && (
+                    <div className="flex items-center gap-2 bg-purple-100 text-purple-700 px-4 py-2 rounded-full mt-2">
+                      <Volume2 className="w-4 h-4" />
+                      <span className="text-sm">{selectedAudioFile.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAudioFile(null)}
+                        className="ml-2 text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    If audio is uploaded, it will be used instead of text-to-speech. If no audio is provided, TTS will be used as fallback.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
                     Plant Images
                   </label>
                   <label className="flex flex-col items-center justify-center h-40 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 hover:bg-gray-100 cursor-pointer transition-all">
@@ -554,7 +640,7 @@ const Admin = () => {
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
-                        onClick={() => navigate(`/plants/${plant.id}`)}
+                        onClick={() => navigate(`/plants/${plant.id}?from=admin`)}
                         className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-all"
                       >
                         <Eye className="w-4 h-4" />
