@@ -11,10 +11,13 @@ import {
   FlaskConical,
   Volume2,
   Pause,
+  Play,
   Edit,
   X,
   Save,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -64,6 +67,8 @@ const PlantDetail = () => {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const [audioLoading, setAudioLoading] = useState(false);
   const isStoppedManuallyRef = useRef(false);
+  const carouselIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isCarouselPaused, setIsCarouselPaused] = useState(false);
 
   const [editFormData, setEditFormData] = useState({
     name: "",
@@ -143,8 +148,79 @@ const PlantDetail = () => {
       if ('speechSynthesis' in window) {
         speechSynthesis.cancel();
       }
+      // Clear carousel interval
+      if (carouselIntervalRef.current) {
+        clearInterval(carouselIntervalRef.current);
+      }
     };
   }, [id, searchParams, toast]);
+
+  // Auto-rotate carousel every 5 seconds
+  useEffect(() => {
+    if (!plant || !plant.images || plant.images.length <= 1) return;
+
+    // Clear existing interval
+    if (carouselIntervalRef.current) {
+      clearInterval(carouselIntervalRef.current);
+    }
+
+    // Only start auto-rotate if not paused
+    if (!isCarouselPaused) {
+      carouselIntervalRef.current = setInterval(() => {
+        setSelectedImageIndex((prevIndex) => {
+          return (prevIndex + 1) % plant.images.length;
+        });
+      }, 5000); // 5 seconds
+    }
+
+    return () => {
+      if (carouselIntervalRef.current) {
+        clearInterval(carouselIntervalRef.current);
+      }
+    };
+  }, [plant, isCarouselPaused]);
+
+  // Navigate carousel manually
+  const goToNextImage = () => {
+    if (!plant || !plant.images) return;
+    setSelectedImageIndex((prevIndex) => (prevIndex + 1) % plant.images.length);
+    // Reset interval when manually navigating
+    if (carouselIntervalRef.current) {
+      clearInterval(carouselIntervalRef.current);
+    }
+    if (!isCarouselPaused) {
+      carouselIntervalRef.current = setInterval(() => {
+        setSelectedImageIndex((prevIndex) => (prevIndex + 1) % plant.images.length);
+      }, 5000);
+    }
+  };
+
+  const goToPrevImage = () => {
+    if (!plant || !plant.images) return;
+    setSelectedImageIndex((prevIndex) => (prevIndex - 1 + plant.images.length) % plant.images.length);
+    // Reset interval when manually navigating
+    if (carouselIntervalRef.current) {
+      clearInterval(carouselIntervalRef.current);
+    }
+    if (!isCarouselPaused) {
+      carouselIntervalRef.current = setInterval(() => {
+        setSelectedImageIndex((prevIndex) => (prevIndex + 1) % plant.images.length);
+      }, 5000);
+    }
+  };
+
+  const goToImage = (index: number) => {
+    setSelectedImageIndex(index);
+    // Reset interval when manually navigating
+    if (carouselIntervalRef.current) {
+      clearInterval(carouselIntervalRef.current);
+    }
+    if (!isCarouselPaused) {
+      carouselIntervalRef.current = setInterval(() => {
+        setSelectedImageIndex((prevIndex) => (prevIndex + 1) % (plant?.images.length || 1));
+      }, 5000);
+    }
+  };
 
   // Stop audio playback function
   const stopAudio = () => {
@@ -889,38 +965,111 @@ const PlantDetail = () => {
             </div>
 
             <div className="p-8">
-              {/* Images Section */}
+              {/* Images Section - Carousel */}
               {plant.images && plant.images.length > 0 && (
                 <div className="mb-8">
-                  <div className="mb-4">
+                  <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-2xl font-bold text-gray-900 mb-2 flex items-center gap-2">
                       <ImageIcon className="w-6 h-6 text-emerald-600" />
                       Images
                     </h2>
+                    {plant.images.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600">
+                          {selectedImageIndex + 1} / {plant.images.length}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setIsCarouselPaused(!isCarouselPaused);
+                            if (!isCarouselPaused) {
+                              // Pause
+                              if (carouselIntervalRef.current) {
+                                clearInterval(carouselIntervalRef.current);
+                              }
+                            } else {
+                              // Resume
+                              carouselIntervalRef.current = setInterval(() => {
+                                setSelectedImageIndex((prevIndex) => (prevIndex + 1) % plant.images.length);
+                              }, 5000);
+                            }
+                          }}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-all"
+                          title={isCarouselPaused ? "Resume auto-play" : "Pause auto-play"}
+                        >
+                          {isCarouselPaused ? (
+                            <Play className="w-4 h-4 text-gray-600" />
+                          ) : (
+                            <Pause className="w-4 h-4 text-gray-600" />
+                          )}
+                        </button>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* Main Image */}
-                  <div className="mb-4">
-                    <img
-                      src={getHighQualityImageUrl(plant.images[selectedImageIndex])}
-                      alt={plant.name}
-                      className="w-full h-96 object-cover rounded-2xl shadow-lg"
-                      loading="lazy"
-                      style={{ imageRendering: "auto" }}
-                    />
+                  {/* Main Image Carousel */}
+                  <div className="relative mb-4 group">
+                    {/* Main Image with fade animation */}
+                    <div className="relative w-full h-96 rounded-2xl overflow-hidden shadow-lg">
+                      <img
+                        key={selectedImageIndex}
+                        src={getHighQualityImageUrl(plant.images[selectedImageIndex])}
+                        alt={`${plant.name} - Image ${selectedImageIndex + 1}`}
+                        className="w-full h-full object-cover animate-fade-in"
+                        loading="lazy"
+                        style={{ imageRendering: "auto" }}
+                      />
+                      
+                      {/* Navigation Arrows */}
+                      {plant.images.length > 1 && (
+                        <>
+                          <button
+                            onClick={goToPrevImage}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+                            aria-label="Previous image"
+                          >
+                            <ChevronLeft className="w-6 h-6" />
+                          </button>
+                          <button
+                            onClick={goToNextImage}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-10"
+                            aria-label="Next image"
+                          >
+                            <ChevronRight className="w-6 h-6" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Progress Indicator Dots */}
+                    {plant.images.length > 1 && (
+                      <div className="flex justify-center gap-2 mt-4">
+                        {plant.images.map((_, index) => (
+                          <button
+                            key={index}
+                            onClick={() => goToImage(index)}
+                            className={`h-2 rounded-full transition-all duration-300 ${
+                              selectedImageIndex === index
+                                ? "w-8 bg-emerald-600"
+                                : "w-2 bg-gray-300 hover:bg-gray-400"
+                            }`}
+                            aria-label={`Go to image ${index + 1}`}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Thumbnail Gallery */}
                   {plant.images.length > 1 && (
-                    <div className="flex gap-4 overflow-x-auto pb-2">
+                    <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
                       {plant.images.map((image, index) => (
                         <button
                           key={index}
-                          onClick={() => setSelectedImageIndex(index)}
-                          className={`flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-2 transition-all ${
+                          onClick={() => goToImage(index)}
+                          className={`flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border-2 transition-all duration-300 ${
                             selectedImageIndex === index
-                              ? "border-emerald-500 ring-2 ring-emerald-200"
-                              : "border-gray-200 hover:border-emerald-300"
+                              ? "border-emerald-500 ring-2 ring-emerald-200 scale-105"
+                              : "border-gray-200 hover:border-emerald-300 hover:scale-105"
                           }`}
                         >
                           <img
